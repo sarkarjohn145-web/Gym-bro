@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GymBro - Admin Login</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="login-box">
+    <h1 style="color: #facc15;">GymBro Admin</h1>
+    <p>Login to manage your gym.</p>
+
+    <div id="email-step">
+      <input type="email" id="admin-email" placeholder="Owner Email">
+      <button onclick="adminSendOTP()" style="background-color: #facc15; color: black;">Send Code</button>
+    </div>
+
+    <div id="otp-step" style="display: none;">
+      <p>Check your email for the 6-digit code.</p>
+      <input type="text" id="admin-otp" placeholder="123456">
+      <button onclick="adminVerifyOTP()" style="background-color: #facc15; color: black;">Verify & Login</button>
+    </div>
+
+    <p id="admin-message"></p>
+  </div>
+
+  <script>
+    // PASTE YOUR SUPABASE URL AND KEY HERE
+    const SUPABASE_URL = 'https://miwwqoyvbygsrhsyautm.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ZIl-94iLmw6URFJ2on8gZQ_eczljJy2';
+    
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function adminSendOTP() {
+      const email = document.getElementById('admin-email').value;
+      const message = document.getElementById('admin-message');
+      message.innerText = "Sending...";
+
+      const { error } = await db.auth.signInWithOtp({ email: email });
+      if (error) {
+        message.innerText = "Error: " + error.message;
+      } else {
+        message.innerText = "";
+        document.getElementById('email-step').style.display = 'none';
+        document.getElementById('otp-step').style.display = 'block';
+      }
+    }
+
+    async function adminVerifyOTP() {
+      const email = document.getElementById('admin-email').value;
+      const token = document.getElementById('admin-otp').value;
+      const message = document.getElementById('admin-message');
+
+      const { error } = await db.auth.verifyOtp({ email, token, type: 'email' });
+      if (error) {
+        message.innerText = "Invalid code.";
+      } else {
+        message.style.color = "#4ade80";
+        message.innerText = "Admin Login Successful!";
+        setTimeout(() => {
+          window.location.href = "admin-dashboard.html";
+        }, 1500);
+      }
+    }
+  </script>
+</body>
+</html>

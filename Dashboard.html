@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GymBro - Member Panel</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { display: block; background-color: #121212; color: white; font-family: Arial, sans-serif; margin: 0; padding-bottom: 70px; }
+    .header { background: #1e1e1e; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; color: #2563eb; border-bottom: 1px solid #333; }
+    .section { display: none; padding: 20px; }
+    .section.active { display: block; }
+    .card { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+    .nav-bar { position: fixed; bottom: 0; width: 100%; background: #1e1e1e; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #333; z-index: 100; }
+    .nav-item { color: #888; text-decoration: none; font-size: 14px; cursor: pointer; }
+    .nav-item.active { color: #2563eb; font-weight: bold; }
+    button { width: 100%; padding: 12px; background-color: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+    .locked { filter: blur(5px); pointer-events: none; }
+    input, select { width: 100%; padding: 10px; margin-bottom: 10px; background: #2a2a2a; border: 1px solid #333; color: white; border-radius: 5px; box-sizing: border-box; }
+    label { display: block; margin-bottom: 5px; font-size: 14px; color: #ccc; }
+    
+    .sub-nav { display: flex; justify-content: space-around; background: #2a2a2a; border-radius: 8px; margin-bottom: 15px; overflow: hidden; }
+    .sub-nav-item { padding: 10px; font-size: 14px; cursor: pointer; color: #888; flex: 1; text-align: center; }
+    .sub-nav-item.active { background: #2563eb; color: white; font-weight: bold; }
+    .sub-section { display: none; }
+    .sub-section.active { display: block; }
+    
+    .macro-box { display: flex; justify-content: space-between; background: #2a2a2a; padding: 10px; border-radius: 5px; margin-bottom: 5px; }
+    .day-box { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+    .meal-row { border-bottom: 1px solid #333; padding: 10px 0; }
+    .meal-row:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+  <div id="join-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: #121212; z-index: 999; display: none; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; text-align: center;">
+    <h2>Welcome to GymBro!</h2>
+    <p>Please enter the Gym Code given by your gym owner.</p>
+    <input type="text" id="join-code-input" placeholder="e.g. GYM123" style="max-width: 300px;">
+    <button onclick="joinGym()" style="max-width: 320px;">Join Gym</button>
+    <p id="join-error" style="color: #f87171; margin-top: 10px;"></p>
+  </div>
+
+  <div class="header" id="gym-name">GymBro</div>
+
+  <div id="home" class="section active">
+    <div class="card">
+      <h2>Welcome, Member!</h2>
+      <p>Your Subscription Status:</p>
+      <h1 id="days-left" style="color: #4ade80; font-size: 40px; margin: 10px 0;">Loading...</h1>
+    </div>
+  </div>
+
+  <div id="plans" class="section">
+    <div class="card">
+      <h2>Choose a Plan</h2>
+      <button id="btn-1m" onclick="payUPI(1000, '1 Month', 30)">1 Month</button>
+      <button id="btn-3m" onclick="payUPI(2700, '3 Months', 90)">3 Months</button>
+      <button id="btn-6m" onclick="payUPI(5000, '6 Months', 180)">6 Months</button>
+      <button id="btn-12m" onclick="payUPI(9000, '12 Months', 365)">12 Months</button>
+      <button id="confirm-payment-btn" class="paid-btn" onclick="confirmPayment()" style="display:none; background-color: #facc15; color: black;">✅ I have paid</button>
+      <hr style="border-color: #333; margin: 20px 0;">
+      <h3>Have a Coupon?</h3>
+      <input type="text" id="member-coupon" placeholder="Enter subscription code">
+      <button style="background: #4ade80; color: black;" onclick="applyCoupon()">Apply Coupon</button>
+    </div>
+  </div>
+
+  <div id="diet" class="section">
+    <div class="card" style="text-align: center; padding: 10px;">
+      <h2>AI Fitness Coach</h2>
+      
+      <div id="diet-lock-screen" style="margin-top: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px;">
+        <h3 style="color: #facc15;">🔒 Locked</h3>
+        <p>Unlock expert diet & workout plans for just ₹99/month.</p>
+        <button onclick="payUPI(99, 'Diet Plan', 30)">Pay ₹99 via UPI</button>
+        <p style="margin-top: 15px; font-size: 14px;">Or use a Diet Coupon Code</p>
+        <input type="text" id="diet-coupon" placeholder="Enter diet code">
+        <button style="background: #4ade80; color: black;" onclick="applyDietCoupon()">Unlock Diet</button>
+      </div>
+
+      <div id="diet-unlocked" style="display: none; text-align: left;">
+        <div id="profile-form-container">
+          <h3>Step 1: Fitness Profile</h3>
+          <label>Age (Years)</label><input type="number" id="p-age" placeholder="e.g. 25">
+          <label>Sex</label>
+          <select id="p-sex"><option value="male">Male</option><option value="female">Female</option></select>
+          <label>Height (cm)</label><input type="number" id="p-height" placeholder="e.g. 175">
+          <label>Current Weight (kg)</label><input type="number" id="p-weight" placeholder="e.g. 70">
+          <label>Fitness Goal</label>
+          <select id="p-goal">
+            <option value="fat_loss">Fat Loss</option>
+            <option value="muscle_building">Muscle Building</option>
+            <option value="body_recomp">Body Recomposition</option>
+          </select>
+          <label>Activity Level</label>
+          <select id="p-activity">
+            <option value="1.2">Sedentary (Desk job)</option>
+            <option value="1.375">Lightly Active (1-2 days gym)</option>
+            <option value="1.55">Moderately Active (3-5 days gym)</option>
+            <option value="1.725">Very Active (6-7 days gym)</option>
+          </select>
+          <label>Training Experience</label>
+          <select id="p-exp"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select>
+          <label>Dietary Preference</label>
+          <select id="p-diet"><option value="veg">Vegetarian</option><option value="egg">Eggetarian</option><option value="nonveg">Non-Vegetarian</option></select>
+          <label>Injuries / Medical Conditions</label>
+          <input type="text" id="p-medical" placeholder="e.g. Knee pain, none, etc.">
+          
+          <button onclick="generatePlan()" style="background: #4ade80; color: black; margin-top: 20px;">Generate My Plan</button>
+          <p style="font-size: 11px; color: #888; margin-top: 15px; line-height: 1.4;">Disclaimer: This is general fitness guidance, not medical treatment. If you have pre-existing health conditions, consult a doctor.</p>
+        </div>
+
+        <div id="plan-container" style="display: none;">
+          <div class="sub-nav">
+            <div class="sub-nav-item active" onclick="showSubSection('sub-overview', this)">Overview</div>
+            <div class="sub-nav-item" onclick="showSubSection('sub-diet', this)">Diet</div>
+            <div class="sub-nav-item" onclick="showSubSection('sub-workout', this)">Workout</div>
+          </div>
+
+          <div id="sub-overview" class="sub-section active">
+            <h3>Your Daily Targets</h3>
+            <div class="card" style="margin-top: 10px; padding: 15px;">
+              <div class="macro-box"><span>Calories</span><span id="macro-cal">0</span></div>
+              <div class="macro-box"><span>Protein</span><span id="macro-p">0g</span></div>
+              <div class="macro-box"><span>Carbs</span><span id="macro-c">0g</span></div>
+              <div class="macro-box"><span>Fats</span><span id="macro-f">0g</span></div>
+              <div class="macro-box"><span>Fiber</span><span id="macro-fib">0g</span></div>
+            </div>
+          </div>
+
+          <div id="sub-diet" class="sub-section">
+            <h3>7-Day Indian Diet Plan</h3>
+            <div id="diet-days-container"></div>
+          </div>
+
+          <div id="sub-workout" class="sub-section">
+            <h3>7-Day Workout Split</h3>
+            <div id="workout-days-container"></div>
+          </div>
+
+          <button onclick="resetProfile()" style="background: #f87171; color: white; margin-top: 20px;">Reset Profile & Recalculate</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="motivation" class="section">
+    <div class="card" style="text-align: center;">
+      <h2>Daily Motivation</h2>
+      <p style="font-size: 20px; font-style: italic; color: #facc15; margin: 30px 0;">"The pain you feel today will be the strength you feel tomorrow."</p>
+      <a href="https://www.instagram.com/dxz_joo" target="_blank"><button style="background: #E1306C;">📸 Instagram</button></a>
+      <a href="https://wa.me/918259851150" target="_blank"><button style="background: #25D366; color: black;">💬 WhatsApp</button></a>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <div class="nav-item active" onclick="showSection('home', this)">🏠 Home</div>
+    <div class="nav-item" onclick="showSection('plans', this)">💳 Plans</div>
+    <div class="nav-item" onclick="showSection('diet', this)">🥗 Diet</div>
+    <div class="nav-item" onclick="showSection('motivation', this)">🔥 Motivation</div>
+  </div>
+
+  <script>
+    // ⚠️ PASTE YOUR SUPABASE URL AND KEY HERE ⚠️
+    const SUPABASE_URL = 'https://miwwqoyvbygsrhsyautm.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ZIl-94iLmw6URFJ2on8gZQ_eczljJy2';
+    
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentUser = null; let myGymId = null; let myGymUpi = "";
+    let selectedAmount = 0; let selectedPlan = ""; let selectedDays = 0;
+
+    function showSection(sectionId, element) {
+      document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+      element.classList.add('active');
+    }
+
+    function showSubSection(subId, element) {
+      document.querySelectorAll('.sub-section').forEach(sec => sec.classList.remove('active'));
+      document.getElementById(subId).classList.add('active');
+      document.querySelectorAll('.sub-nav-item').forEach(nav => nav.classList.remove('active'));
+      element.classList.add('active');
+    }
+
+    async function initMember() {
+      const { data: { user } } = await db.auth.getUser();
+      if (!user) return window.location.href = "index.html";
+      currentUser = user;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlGymCode = urlParams.get('gym');
+
+      let { data: member } = await db.from('members').select('*').eq('email', user.email).single();
+      if (!member) { await db.from('members').insert([{ email: user.email, subscription_plan: 'None' }]); member = { email: user.email }; }
+
+      if (!member.gym_id && urlGymCode) {
+        const { data: gym } = await db.from('gyms').select('id').eq('join_code', urlGymCode).single();
+        if (gym) { await db.from('members').update({ gym_id: gym.id }).eq('email', user.email); member.gym_id = gym.id; }
+      }
+
+      if (!member.gym_id) { document.getElementById('join-screen').style.display = 'flex'; return; }
+
+      myGymId = member.gym_id;
+      const { data: gym } = await db.from('gyms').select('*').eq('id', myGymId).single();
+      if (gym) {
+        document.getElementById('gym-name').innerText = gym.gym_name;
+        myGymUpi = gym.upi_id || "johnsarkar245i@fam";
+        document.getElementById('btn-1m').innerText = "1 Month - ₹" + gym.price_1m;
+        document.getElementById('btn-1m').setAttribute('onclick', "payUPI(" + gym.price_1m + ", '1 Month', 30)");
+        document.getElementById('btn-3m').innerText = "3 Months - ₹" + gym.price_3m;
+        document.getElementById('btn-3m').setAttribute('onclick', "payUPI(" + gym.price_3m + ", '3 Months', 90)");
+        document.getElementById('btn-6m').innerText = "6 Months - ₹" + gym.price_6m;
+        document.getElementById('btn-6m').setAttribute('onclick', "payUPI(" + gym.price_6m + ", '6 Months', 180)");
+        document.getElementById('btn-12m').innerText = "12 Months - ₹" + gym.price_12m;
+        document.getElementById('btn-12m').setAttribute('onclick', "payUPI(" + gym.price_12m + ", '12 Months', 365)");
+      }
+
+      if (member.expiry_date) {
+        const timeDiff = new Date(member.expiry_date).getTime() - new Date().getTime();
+        const daysLeft = Math.ceil(timeDiff / (1000 * 3600 * 24)); 
+        document.getElementById('days-left').innerText = daysLeft > 0 ? daysLeft + " Days Left" : "Expired";
+      } else { document.getElementById('days-left').innerText = "No Active Plan"; }
+
+      if (member.diet_unlocked) {
+        document.getElementById('diet-lock-screen').style.display = 'none';
+        document.getElementById('diet-unlocked').style.display = 'block';
+        loadFitnessProfile();
+      } else {
+        document.getElementById('diet-lock-screen').style.display = 'block';
+        document.getElementById('diet-unlocked').style.display = 'none';
+      }
+    }
+
+    async function joinGym() {
+      const code = document.getElementById('join-code-input').value.toUpperCase();
+      const { data: gym } = await db.from('gyms').select('id').eq('join_code', code).single();
+      if (!gym) return document.getElementById('join-error').innerText = "❌ Invalid Gym Code.";
+      await db.from('members').update({ gym_id: gym.id }).eq('email', currentUser.email);
+      window.location.reload();
+    }
+
+    function payUPI(amount, planName, days) {
+      selectedAmount = amount; selectedPlan = planName; selectedDays = days;
+      const url = "upi://pay?pa=" + myGymUpi + "&pn=GymBro&am=" + amount + "&cu=INR";
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) window.location.href = url;
+      else window.open("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=" + encodeURIComponent(url), '_blank');
+      document.getElementById('confirm-payment-btn').style.display = 'block';
+      document.getElementById('confirm-payment-btn').innerText = "✅ I have paid ₹" + amount;
+    }
+
+    async function confirmPayment() {
+      await db.from('payments').insert([{ gym_id: myGymId, member_email: currentUser.email, amount: selectedAmount, plan_name: selectedPlan, plan_days: selectedDays, status: 'pending' }]);
+      alert("✅ Sent! Owner will verify."); document.getElementById('confirm-payment-btn').style.display = 'none';
+    }
+
+    async function applyCoupon() {
+      const code = document.getElementById('member-coupon').value.toUpperCase();
+      const { data: coupon } = await db.from('coupons').select('*').eq('code', code).eq('gym_id', myGymId).single();
+      if (!coupon || coupon.used_count >= coupon.max_uses) return alert("❌ Invalid or expired coupon!");
+      const { data: member } = await db.from('members').select('expiry_date').eq('email', currentUser.email).single();
+      let baseDate = member && member.expiry_date ? new Date(member.expiry_date) : new Date(); 
+      if (baseDate < new Date()) baseDate = new Date(); 
+      baseDate.setDate(baseDate.getDate() + coupon.duration_days);
+      await db.from('members').update({ expiry_date: baseDate.toISOString().split('T')[0] }).eq('email', currentUser.email);
+      await db.from('coupons').update({ used_count: coupon.used_count + 1 }).eq('id', coupon.id);
+      alert("✅ Success! " + coupon.duration_days + " days added."); window.location.reload();
+    }
+
+    async function applyDietCoupon() {
+      const code = document.getElementById('diet-coupon').value.toUpperCase();
+      const { data: coupon } = await db.from('coupons').select('*').eq('code', code).eq('gym_id', myGymId).single();
+      if (!coupon || coupon.coupon_type !== 'diet' || coupon.used_count >= coupon.max_uses) return alert("❌ Invalid diet coupon!");
+      await db.from('members').update({ diet_unlocked: true }).eq('email', currentUser.email);
+      await db.from('coupons').update({ used_count: coupon.used_count + 1 }).eq('id', coupon.id);
+      alert("✅ Diet Unlocked!"); window.location.reload();
+    }
+
+    async function loadFitnessProfile() {
+      const { data: profile } = await db.from('fitness_profiles').select('*').eq('member_email', currentUser.email).single();
+      if (profile) {
+        document.getElementById('profile-form-container').style.display = 'none';
+        document.getElementById('plan-container').style.display = 'block';
+        renderDashboard(profile);
+      } else {
+        document.getElementById('profile-form-container').style.display = 'block';
+        document.getElementById('plan-container').style.display = 'none';
+      }
+    }
+
+    async function generatePlan() {
+      const age = parseInt(document.getElementById('p-age').value);
+      const sex = document.getElementById('p-sex').value;
+      const height = parseFloat(document.getElementById('p-height').value);
+      const weight = parseFloat(document.getElementById('p-weight').value);
+      const goal = document.getElementById('p-goal').value;
+      const activity = parseFloat(document.getElementById('p-activity').value);
+      const exp = document.getElementById('p-exp').value;
+      const dietPref = document.getElementById('p-diet').value;
+      const medical = document.getElementById('p-medical').value;
+
+      if(!age || !height || !weight) return alert("Please fill all required fields.");
+      if (age < 18 || medical.toLowerCase().includes("pregnancy") || medical.toLowerCase().includes("heart")) {
+        return alert("⚠️ Health Warning: You are under 18 or have a medical condition. Please consult a doctor before starting this plan.");
+      }
+
+      const profileData = {
+        member_email: currentUser.email, age: age, sex: sex, height_cm: height, weight_kg: weight,
+        goal: goal, activity_level: activity, experience: exp, diet_pref: dietPref, medical_conditions: medical
+      };
+
+      await db.from('fitness_profiles').insert([profileData]);
+      loadFitnessProfile(); 
+    }
+
+    function renderDashboard(p) {
+      let bmr = (10 * p.weight_kg) + (6.25 * p.height_cm) - (5 * p.age);
+      bmr += (p.sex === 'male') ? 5 : -161;
+      let tdee = Math.round(bmr * p.activity_level);
+      let targetCal = tdee;
+
+      if (p.goal === 'fat_loss') targetCal = Math.round(tdee * 0.85); 
+      if (p.goal === 'muscle_building') targetCal = Math.round(tdee * 1.10); 
+      if (p.goal === 'body_recomp') targetCal = Math.round(tdee * 0.95);
+
+      if (p.sex === 'male' && targetCal < 1500) targetCal = 1500;
+      if (p.sex === 'female' && targetCal < 1200) targetCal = 1200;
+
+      let proteinG = Math.round(p.weight_kg * 2.0);
+      let fatG = Math.round((targetCal * 0.25) / 9); 
+      let carbCals = targetCal - (proteinG * 4) - (fatG * 9);
+      let carbG = Math.round(carbCals / 4);
+      let fiberG = Math.round((targetCal / 1000) * 14);
+
+      document.getElementById('macro-cal').innerText = targetCal + " kcal";
+      document.getElementById('macro-p').innerText = proteinG + " g";
+      document.getElementById('macro-c').innerText = carbG + " g";
+      document.getElementById('macro-f').innerText = fatG + " g";
+      document.getElementById('macro-fib').innerText = fiberG + " g";
+
+      generateDiet(targetCal, proteinG, carbG, fatG, p.diet_pref);
+      generateWorkout(p.experience);
+    }
+
+    function generateDiet(cals, p, c, f, pref) {
+      const container = document.getElementById('diet-days-container');
+      container.innerHTML = '';
+      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      
+      days.forEach(day => {
+        let mealsHtml = '<div class="day-box">';
+        mealsHtml += '<h4 style="color:#2563eb; margin-top:0;">' + day + '</h4>';
+        mealsHtml += '<div class="meal-row"><strong>Breakfast:</strong> Oats (' + Math.round(c*0.15) + 'g), Milk (200ml), ' + (pref==='veg' ? 'Paneer' : '2 Eggs') + '</div>';
+        mealsHtml += '<div class="meal-row"><strong>Mid-Morning:</strong> Roasted Chana (30g), 1 Apple</div>';
+        mealsHtml += '<div class="meal-row"><strong>Lunch:</strong> Roti (3), Dal (150g cooked), ' + (pref==='nonveg' ? 'Chicken 150g' : 'Soya Chunks 50g') + ', Salad</div>';
+        mealsHtml += '<div class="meal-row"><strong>Pre-Workout:</strong> 1 Banana, Black Coffee</div>';
+        mealsHtml += '<div class="meal-row"><strong>Post-Workout:</strong> Whey Protein OR ' + (pref==='veg' ? 'Soya chunks' : 'Chicken Breast 100g') + '</div>';
+        mealsHtml += '<div class="meal-row"><strong>Dinner:</strong> Rice (' + Math.round(c*0.2) + 'g raw), Curd (100g), Mixed Veggies</div>';
+        mealsHtml += '</div>';
+        container.innerHTML += mealsHtml;
+      });
+    }
+
+    function generateWorkout(exp) {
+      const container = document.getElementById('workout-days-container');
+      container.innerHTML = '';
+      const split = [
+        { day: "Monday", type: "PUSH (Chest, Shoulders, Triceps)" },
+        { day: "Tuesday", type: "PULL (Back, Rear Delts, Biceps)" },
+        { day: "Wednesday", type: "LEGS + ABS (Quads, Hamstrings, Core)" },
+        { day: "Thursday", type: "ACTIVE RECOVERY (30-45 mins Walking, Stretching)" },
+        { day: "Friday", type: "UPPER BODY (Chest, Back, Shoulders, Arms)" },
+        { day: "Saturday", type: "LOWER BODY + ABS (Legs, Core)" },
+        { day: "Sunday", type: "COMPLETE REST" }
+      ];
+
+      split.forEach(s => {
+        let content = "";
+        if (s.day === "Sunday") content = "<p style='color:#4ade80;'>Rest day. Relax and recover.</p>";
+        else if (s.day === "Thursday") content = "<p>Light walk and full body stretching.</p>";
+        else {
+          let sets = exp === 'beginner' ? 2 : (exp === 'intermediate' ? 3 : 4);
+          let reps = exp === 'beginner' ? "10-12" : "8-10";
+          content = "<p>Bench Press: " + sets + " x " + reps + "</p><p>Shoulder Press: " + sets + " x " + reps + "</p><p>Tricep Pushdowns: " + sets + " x 12-15</p>";
+        }
+
+        let workoutHtml = '<div class="day-box">';
+        workoutHtml += '<h4 style="color:#4ade80; margin-top:0;">' + s.day + '</h4>';
+        workoutHtml += '<strong style="font-size:14px; color:#aaa;">' + s.type + '</strong>';
+        workoutHtml += '<div style="margin-top:10px; font-size:14px;">' + content + '</div>';
+        workoutHtml += '</div>';
+        container.innerHTML += workoutHtml;
+      });
+    }
+
+    async function resetProfile() {
+      if(confirm("Are you sure? This will delete your current plan.")) {
+        await db.from('fitness_profiles').delete().eq('member_email', currentUser.email);
+        window.location.reload();
+      }
+    }
+
+    window.onload = initMember;
+  </script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GymBro - Admin Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { display: block; background-color: #121212; color: white; font-family: Arial, sans-serif; margin: 0; padding-bottom: 70px; }
+    .header { background: #1e1e1e; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; color: #facc15; border-bottom: 1px solid #333; }
+    .section { display: none; padding: 20px; }
+    .section.active { display: block; }
+    .card { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #facc15; }
+    .nav-bar { position: fixed; bottom: 0; width: 100%; background: #1e1e1e; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #333; }
+    .nav-item { color: #888; text-decoration: none; font-size: 14px; cursor: pointer; }
+    .nav-item.active { color: #facc15; font-weight: bold; }
+    button { padding: 10px; background-color: #facc15; color: black; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; width: 100%;}
+    .approve-btn { background: #4ade80; }
+    .reject-btn { background: #f87171; color: white; }
+    .flex-row { display: flex; gap: 10px; }
+    input, select { width: 90%; padding: 10px; margin-bottom: 10px; background: #2a2a2a; border: 1px solid #333; color: white; border-radius: 5px; }
+  </style>
+</head>
+<body>
+
+  <div class="header" id="gym-name-header">Loading Gym...</div>
+
+  <div id="payments" class="section active">
+    <h2>Pending Approvals</h2>
+    <div id="pending-list"><p>Loading...</p></div>
+  </div>
+
+  <div id="members" class="section">
+    <h2>My Members</h2>
+    <div id="members-list"><p>Loading...</p></div>
+  </div>
+
+  <div id="coupons" class="section">
+    <h2>Generate Coupon</h2>
+    <div class="card">
+      <input type="text" id="coupon-code" placeholder="Code (e.g., GYM50)">
+      <select id="coupon-type">
+        <option value="subscription">Subscription (1 Month Free)</option>
+        <option value="diet">Unlock Diet Plan</option>
+      </select>
+      <button onclick="generateCode()">Generate Coupon</button>
+    </div>
+  </div>
+
+  <div id="settings" class="section">
+    <h2>Gym Settings</h2>
+    <div class="card">
+      <h3>Prices (₹)</h3>
+      <label>1 Month:</label><input type="number" id="price1m"><br>
+      <label>3 Months:</label><input type="number" id="price3m"><br>
+      <label>6 Months:</label><input type="number" id="price6m"><br>
+      <label>12 Months:</label><input type="number" id="price12m"><br>
+      <label>Your UPI ID:</label><input type="text" id="upi-id"><br>
+      <button onclick="saveSettings()">Save Settings</button>
+      <p style="margin-top:20px; font-size:14px;">Join Code: <b id="join-code-display"></b></p>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <div class="nav-item active" onclick="showSection('payments', this)">💳 Approvals</div>
+    <div class="nav-item" onclick="showSection('members', this)">👥 Members</div>
+    <div class="nav-item" onclick="showSection('coupons', this)">🎟️ Coupons</div>
+    <div class="nav-item" onclick="showSection('settings', this)">⚙️ Settings</div>
+  </div>
+
+  <script>
+    // ⚠️ PASTE YOUR SUPABASE URL AND KEY HERE ⚠️
+    const SUPABASE_URL = 'https://miwwqoyvbygsrhsyautm.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ZIl-94iLmw6URFJ2on8gZQ_eczljJy2';
+    
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentGymId = null;
+
+    function showSection(sectionId, element) {
+      document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+      element.classList.add('active');
+      if(sectionId === 'settings') loadSettings();
+      if(sectionId === 'payments') loadPayments();
+    }
+
+    async function initAdmin() {
+      const { data: { user } } = await db.auth.getUser();
+      if(!user) return window.location.href = "admin.html";
+
+      // Find the gym that belongs to this logged-in email
+      const { data: gym, error } = await db.from('gyms').select('*').eq('owner_email', user.email).single();
+      
+      if(!gym) {
+        document.getElementById('gym-name-header').innerText = "No Gym Found for this Email!";
+        return;
+      }
+
+      currentGymId = gym.id;
+      document.getElementById('gym-name-header').innerText = gym.gym_name + " Admin";
+      document.getElementById('join-code-display').innerText = gym.join_code;
+      
+      loadRealMembers();
+      loadPayments();
+    }
+
+    async function loadPayments() {
+      if(!currentGymId) return;
+      const { data } = await db.from('payments').select('*').eq('gym_id', currentGymId).eq('status', 'pending');
+      const container = document.getElementById('pending-list');
+      container.innerHTML = ''; 
+
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p>No pending requests.</p>';
+        return;
+      }
+
+      data.forEach(pay => {
+        let cardHtml = '<div class="card">';
+        cardHtml += '<h3>' + pay.member_email + '</h3>';
+        cardHtml += '<p>Plan: ' + pay.plan_name + ' (₹' + pay.amount + ')</p>';
+        cardHtml += '<div class="flex-row">';
+        cardHtml += '<button class="approve-btn" onclick="approvePayment(\'' + pay.id + '\', \'' + pay.member_email + '\', ' + pay.plan_days + ', \'' + pay.plan_name + '\')">✅ Approve</button>';
+        cardHtml += '<button class="reject-btn" onclick="rejectPayment(\'' + pay.id + '\')">❌ Reject</button>';
+        cardHtml += '</div></div>';
+        container.innerHTML += cardHtml;
+      });
+    }
+
+    async function approvePayment(paymentId, memberEmail, days, planName) {
+      await db.from('payments').update({ status: 'approved' }).eq('id', paymentId);
+      
+      const { data: member } = await db.from('members').select('expiry_date').eq('email', memberEmail).single();
+      let baseDate = new Date(); 
+      
+      if (member && member.expiry_date) {
+        const currentExpiry = new Date(member.expiry_date);
+        if (currentExpiry > baseDate) baseDate = currentExpiry;
+      }
+      
+      baseDate.setDate(baseDate.getDate() + days);
+      
+      await db.from('members').update({ 
+        expiry_date: baseDate.toISOString().split('T')[0], 
+        subscription_plan: planName 
+      }).eq('email', memberEmail);
+      
+      alert("✅ Approved!"); 
+      loadPayments();
+    }
+
+    async function rejectPayment(id) {
+      await db.from('payments').update({ status: 'rejected' }).eq('id', id);
+      loadPayments();
+    }
+
+    async function loadRealMembers() {
+      if(!currentGymId) return;
+      const { data } = await db.from('members').select('*').eq('gym_id', currentGymId);
+      const container = document.getElementById('members-list');
+      container.innerHTML = ''; 
+      
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p>No members yet.</p>';
+        return;
+      }
+      
+      data.forEach(m => {
+        let cardHtml = '<div class="card">';
+        cardHtml += '<h3>' + m.email + '</h3>';
+        cardHtml += '<p>Plan: <span style="color: #4ade80;">' + (m.subscription_plan || 'None') + '</span></p>';
+        cardHtml += '</div>';
+        container.innerHTML += cardHtml;
+      });
+    }
+
+    async function generateCode() {
+      const code = document.getElementById('coupon-code').value.toUpperCase();
+      const type = document.getElementById('coupon-type').value;
+      if (!code) return alert("Please type a code first.");
+      
+      const { error } = await db.from('coupons').insert([{ 
+        gym_id: currentGymId, 
+        code: code, 
+        coupon_type: type, 
+        duration_days: 30, 
+        max_uses: 1, 
+        used_count: 0 
+      }]);
+      
+      if (error) alert("Error: " + error.message);
+      else { 
+        alert("Coupon " + code + " saved!"); 
+        document.getElementById('coupon-code').value = ''; 
+      }
+    }
+
+    async function loadSettings() {
+      if(!currentGymId) return;
+      const { data } = await db.from('gyms').select('*').eq('id', currentGymId).single();
+      if (data) {
+        document.getElementById('price1m').value = data.price_1m;
+        document.getElementById('price3m').value = data.price_3m;
+        document.getElementById('price6m').value = data.price_6m;
+        document.getElementById('price12m').value = data.price_12m;
+        document.getElementById('upi-id').value = data.upi_id || 'johnsarkar245i@fam';
+      }
+    }
+
+    async function saveSettings() {
+      const { error } = await db.from('gyms').update({
+        price_1m: document.getElementById('price1m').value,
+        price_3m: document.getElementById('price3m').value,
+        price_6m: document.getElementById('price6m').value,
+        price_12m: document.getElementById('price12m').value,
+        upi_id: document.getElementById('upi-id').value
+      }).eq('id', currentGymId);
+      
+      if (error) alert("Error: " + error.message);
+      else alert("✅ Settings updated successfully!");
+    }
+
+    window.onload = initAdmin;
+  </script>
+</body>
+</html>
