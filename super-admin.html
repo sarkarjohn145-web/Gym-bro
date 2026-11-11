@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GymBro - Super Admin</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { display: block; background-color: #121212; color: white; font-family: Arial, sans-serif; margin: 0; padding-bottom: 70px; }
+    .header { background: #1e1e1e; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; color: #f87171; border-bottom: 1px solid #333; }
+    .section { display: none; padding: 20px; }
+    .section.active { display: block; }
+    
+    /* Stats Dashboard */
+    .stats-container { display: flex; gap: 10px; margin-bottom: 20px; }
+    .stat-box { flex: 1; background: #1e1e1e; padding: 15px; border-radius: 10px; text-align: center; border-top: 3px solid #f87171; }
+    .stat-number { font-size: 24px; font-weight: bold; color: #facc15; display: block; margin-top: 5px; }
+    .stat-label { font-size: 12px; color: #888; text-transform: uppercase; }
+
+    .card { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #f87171; }
+    .nav-bar { position: fixed; bottom: 0; width: 100%; background: #1e1e1e; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #333; z-index: 100; }
+    .nav-item { color: #888; text-decoration: none; font-size: 14px; cursor: pointer; }
+    .nav-item.active { color: #f87171; font-weight: bold; }
+    
+    button { padding: 10px; background-color: #f87171; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; width: 100%; }
+    input { width: 100%; padding: 10px; margin-bottom: 10px; background: #2a2a2a; border: 1px solid #333; color: white; border-radius: 5px; box-sizing: border-box; }
+    
+    .gym-card { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #4ade80; }
+    .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+    .copy-btn { background: #2563eb; color: white; font-size: 14px; padding: 8px; flex: 1; }
+    .delete-btn { background: #f87171; color: white; font-size: 14px; padding: 8px; flex: 1; }
+  </style>
+</head>
+<body>
+
+  <div class="header">GymBro CEO Panel</div>
+
+  <div id="gyms" class="section active">
+    
+    <!-- THE METRICS DASHBOARD -->
+    <div class="stats-container">
+      <div class="stat-box">
+        <span class="stat-label">Total Gyms</span>
+        <span class="stat-number" id="total-gyms">0</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Members</span>
+        <span class="stat-number" id="total-members">0</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Total Revenue</span>
+        <span class="stat-number" id="total-revenue">₹0</span>
+      </div>
+    </div>
+
+    <h3>My Gym Clients</h3>
+    <div id="gyms-list"><p>Loading...</p></div>
+  </div>
+
+  <div id="create" class="section">
+    <h2>Add New Gym Client</h2>
+    <div class="card">
+      <input type="text" id="new-gym-name" placeholder="Gym Name (e.g. Iron Paradise)">
+      <input type="email" id="new-owner-email" placeholder="Owner Login Email">
+      <input type="text" id="new-join-code" placeholder="Join Code (e.g. IRON123)">
+      <input type="text" id="new-upi-id" placeholder="Owner UPI ID (e.g. name@upi)">
+      <button onclick="createGym()" style="background: #4ade80; color: black;">Create Gym Account</button>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <div class="nav-item active" onclick="showSection('gyms', this)">🏢 Dashboard</div>
+    <div class="nav-item" onclick="showSection('create', this)">➕ Add Gym</div>
+  </div>
+
+  <script>
+    // ⚠️ PASTE YOUR SUPABASE URL AND KEY HERE ⚠️
+    const SUPABASE_URL = 'https://miwwqoyvbygsrhsyautm.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ZIl-94iLmw6URFJ2on8gZQ_eczljJy2';
+    
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 🔒 SECURITY: Only this email can access this page!
+    const SUPER_ADMIN_EMAIL = 'sarkarjohn145@gmail.com';
+
+    function showSection(sectionId, element) {
+      document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+      element.classList.add('active');
+    }
+
+    async function initSuperAdmin() {
+      const { data: { user } } = await db.auth.getUser();
+      
+      if (!user || user.email !== SUPER_ADMIN_EMAIL) {
+        alert("Access Denied. This is for the app owner only.");
+        window.location.href = "index.html"; 
+        return;
+      }
+
+      loadDashboardData();
+    }
+
+    async function loadDashboardData() {
+      // 1. Get all gyms
+      const { data: gyms } = await db.from('gyms').select('*');
+      
+      // 2. Get all members (to count them)
+      const { data: members } = await db.from('members').select('id');
+      
+      // 3. Get all approved payments (to calculate revenue)
+      const { data: payments } = await db.from('payments').select('amount').eq('status', 'approved');
+
+      // Update the Top Metrics
+      document.getElementById('total-gyms').innerText = gyms ? gyms.length : 0;
+      document.getElementById('total-members').innerText = members ? members.length : 0;
+
+      let totalRevenue = 0;
+      if (payments && payments.length > 0) {
+        payments.forEach(p => {
+          totalRevenue += parseFloat(p.amount);
+        });
+      }
+      document.getElementById('total-revenue').innerText = "₹" + totalRevenue.toLocaleString('en-IN');
+
+      // Render the Gym List
+      const container = document.getElementById('gyms-list');
+      container.innerHTML = '';
+
+      if (!gyms || gyms.length === 0) {
+        container.innerHTML = '<p>No gyms registered yet. Add one!</p>';
+        return;
+      }
+
+      gyms.forEach(gym => {
+        let gymHtml = '<div class="gym-card">';
+        gymHtml += '<h3 style="margin-top:0;">' + gym.gym_name + '</h3>';
+        gymHtml += '<p style="font-size:14px; color:#aaa;">Owner: ' + gym.owner_email + '</p>';
+        gymHtml += '<p style="font-size:14px;">Join Code: <b style="color:#facc15;">' + gym.join_code + '</b></p>';
+        
+        gymHtml += '<div class="btn-group">';
+        gymHtml += '<button class="copy-btn" onclick="copyLink(\'' + gym.join_code + '\')">Copy Link</button>';
+        gymHtml += '<button class="delete-btn" onclick="deleteGym(\'' + gym.id + '\', \'' + gym.gym_name + '\')">❌ Kick Gym</button>';
+        gymHtml += '</div>';
+        gymHtml += '</div>';
+        
+        container.innerHTML += gymHtml;
+      });
+    }
+
+    async function createGym() {
+      const name = document.getElementById('new-gym-name').value;
+      const email = document.getElementById('new-owner-email').value;
+      const code = document.getElementById('new-join-code').value.toUpperCase();
+      const upi = document.getElementById('new-upi-id').value;
+
+      if(!name || !email || !code) return alert("Please fill all required fields.");
+
+      const { error } = await db.from('gyms').insert([{
+        gym_name: name,
+        owner_email: email,
+        join_code: code,
+        upi_id: upi,
+        is_approved: true
+      }]);
+
+      if (error) {
+        alert("Error: " + error.message);
+      } else {
+        alert("✅ Gym created successfully! Tell them to log in via the Admin page.");
+        document.getElementById('new-gym-name').value = '';
+        document.getElementById('new-owner-email').value = '';
+        document.getElementById('new-join-code').value = '';
+        document.getElementById('new-upi-id').value = '';
+        loadDashboardData(); // Refresh stats and list
+      }
+    }
+
+    async function deleteGym(id, name) {
+      if(!confirm("WARNING: Are you sure you want to kick " + name + "? This will delete all their members and data forever.")) {
+        return;
+      }
+
+      const { error } = await db.from('gyms').delete().eq('id', id);
+
+      if (error) {
+        alert("Error deleting gym: " + error.message);
+      } else {
+        alert("✅ Gym kicked out successfully.");
+        loadDashboardData(); // Refresh stats and list
+      }
+    }
+
+    function copyLink(code) {
+      const link = window.location.origin + "/dashboard.html?gym=" + code;
+      navigator.clipboard.writeText(link);
+      alert("Link copied! Send this to the gym owner:\n" + link);
+    }
+
+    window.onload = initSuperAdmin;
+  </script>
+</body>
+</html>
