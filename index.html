@@ -4,7 +4,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GymBro Login</title>
   <link rel="stylesheet" href="styles.css">
-  <!-- This connects to Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -12,13 +11,11 @@
     <h1>GymBro</h1>
     <p>Welcome! Login to your gym.</p>
 
-    <!-- Step 1: Email input -->
     <div id="email-step">
       <input type="email" id="email" placeholder="Enter your email">
       <button onclick="sendOTP()">Send Code</button>
     </div>
 
-    <!-- Step 2: OTP input (hidden by default) -->
     <div id="otp-step" style="display: none;">
       <p>Check your email for the 6-digit code.</p>
       <input type="text" id="otp" placeholder="123456">
